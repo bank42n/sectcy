@@ -21,6 +21,7 @@ export default class SelectSectionPlugin extends Plugin {
 
     async onload() {
         await this.loadSettings();
+        this.refreshBodyClass();
 
         // Register CodeMirror extension for Live Preview
         this.registerEditorExtension(selectSectionExtension(this));
@@ -37,7 +38,7 @@ export default class SelectSectionPlugin extends Plugin {
     }
 
     onunload() {
-
+        document.body.removeClass("select-section-always-show");
     }
 
     async loadSettings() {
@@ -46,8 +47,17 @@ export default class SelectSectionPlugin extends Plugin {
 
     async saveSettings() {
         await this.saveData(this.settings);
+        this.refreshBodyClass();
         // Trigger a refresh of the views to apply setting changes
         this.app.workspace.updateOptions();
+    }
+
+    refreshBodyClass() {
+        if (this.settings.alwaysShowIcons) {
+            document.body.addClass("select-section-always-show");
+        } else {
+            document.body.removeClass("select-section-always-show");
+        }
     }
 
     addIconsToHeader(header: HTMLElement, context: MarkdownPostProcessorContext) {
@@ -56,9 +66,7 @@ export default class SelectSectionPlugin extends Plugin {
 
         const container = document.createElement("span");
         container.addClass("select-section-container");
-        if (this.settings.alwaysShowIcons) {
-            container.addClass("always-show");
-        }
+        // Body class handles visibility now
 
         if (this.settings.showSelectButton) {
             const selectBtn = container.createSpan({ cls: "select-section-btn" });
@@ -85,26 +93,8 @@ export default class SelectSectionPlugin extends Plugin {
 
     // Logic for Reading View Selection/Copy
     handleSelect(header: HTMLElement, context: MarkdownPostProcessorContext) {
-        // This is tricky in Reading View because we don't have an Editor instance directly mapped easily
-        // For now, we'll focus on the Editor view logic which is more robust.
-        // Reading view selection is complex because it renders HTML, not the source text directly.
-        // However, we can try to find the corresponding section in the source file.
-
-        // Note: Implementing robust Reading View selection that maps back to the editor is quite involved.
-        // Often plugins switch to Markdown view to select.
-        // For this MVP, I will implement the logic but it might require the user to be in a mode where they can edit
-        // or we just copy the text content of the HTML elements (which loses markdown formatting).
-
-        // Actually, the best way for Reading View is to use the `SectionInfo` if available, or parse the file.
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (view) {
-            // If we are in reading view, we can still access the editor to select text, 
-            // but the user might not see the selection if they are in preview mode.
-            // So for Reading View, "Select" might switch to Edit mode or just be less useful.
-            // "Copy" is more useful in Reading View.
-
-            // Let's implement Copy for Reading View by parsing the file content.
-            // We need to know which header this is.
             const sectionInfo = context.getSectionInfo(header);
             if (sectionInfo) {
                 this.selectOrCopySection(view.editor, sectionInfo.lineStart, true);
@@ -211,14 +201,8 @@ function selectSectionExtension(plugin: SelectSectionPlugin) {
                         if (match) {
                             // Add widget
                             builder.add(
-                                line.from + match[0].length - 1, // Position after the hashes? Or at the end of line? 
-                                // Let's put it at the end of the hashes or beginning of line.
-                                // Actually, usually these icons go to the left or right of the header.
-                                // Let's put it at the end of the line for now, or maybe right after the header markers.
-                                // Putting it at the end of the line is safer for flow.
-                                // But user might want it next to the header text.
-                                // Let's try putting it after the space following hashes.
-                                line.from + match[0].length - 1,
+                                line.to,
+                                line.to,
                                 Decoration.widget({
                                     widget: new SelectSectionWidget(plugin, line.number - 1),
                                     side: 1
@@ -251,9 +235,7 @@ class SelectSectionWidget extends WidgetType {
         const container = document.createElement("span");
         container.addClass("select-section-container");
         container.addClass("cm-widget"); // Helper class
-        if (this.plugin.settings.alwaysShowIcons) {
-            container.addClass("always-show");
-        }
+        // Body class handles visibility now
 
         if (this.plugin.settings.showSelectButton) {
             const selectBtn = container.createSpan({ cls: "select-section-btn" });
@@ -261,9 +243,6 @@ class SelectSectionWidget extends WidgetType {
             selectBtn.ariaLabel = "Select Section";
             selectBtn.onclick = (e) => {
                 e.stopPropagation(); // Prevent cursor movement
-                // We need to access the editor instance. 
-                // In CM6, we can find the editor view, but we need the Obsidian Editor interface for our helper method.
-                // We can get it from the workspace.
                 const markdownView = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
                 if (markdownView) {
                     this.plugin.selectOrCopySection(markdownView.editor, this.lineNumber, true);

@@ -15,9 +15,10 @@ h3:hover .select-section-container,
 h4:hover .select-section-container,
 h5:hover .select-section-container,
 h6:hover .select-section-container,
-.cm-header:hover + .select-section-container, /* This selector might be tricky in CM6, let's rely on parent hover if possible, or just the container itself */
+.cm-header:hover+.select-section-container,
+/* This selector might be tricky in CM6, let's rely on parent hover if possible, or just the container itself */
 .select-section-container:hover,
-.select-section-container.always-show {
+body.select-section-always-show .select-section-container {
     opacity: 1;
 }
 

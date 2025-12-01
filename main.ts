@@ -1,4 +1,4 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, MarkdownPostProcessorContext, setIcon } from 'obsidian';
+import { App, Editor, MarkdownView, Modal, Notice, Plugin, PluginSettingTab, Setting, MarkdownPostProcessorContext, setIcon, TFolder, TFile } from 'obsidian';
 import { Extension, StateField, StateEffect, RangeSetBuilder, Transaction } from "@codemirror/state";
 import { EditorView, Decoration, DecorationSet, WidgetType, ViewPlugin, ViewUpdate } from "@codemirror/view";
 
@@ -35,6 +35,58 @@ export default class SelectSectionPlugin extends Plugin {
         });
 
         this.addSettingTab(new SelectSectionSettingTab(this.app, this));
+
+        this.registerEvent(
+            this.app.workspace.on("file-menu", (menu, file) => {
+                if (file instanceof TFolder) {
+                    menu.addItem((item) => {
+                        item
+                            .setTitle("Merge Folder Notes")
+                            .setIcon("documents")
+                            .onClick(async () => {
+                                await this.mergeFolderNotes(file);
+                            });
+                    });
+                }
+            })
+        );
+    }
+
+    async mergeFolderNotes(folder: TFolder) {
+        const files = folder.children
+            .filter((file): file is TFile => file instanceof TFile && file.extension === "md")
+            .sort((a, b) => a.name.localeCompare(b.name));
+
+        if (files.length === 0) {
+            new Notice("No markdown files found in this folder.");
+            return;
+        }
+
+        let mergedContent = "";
+        for (const file of files) {
+            const content = await this.app.vault.read(file);
+            if (mergedContent.length > 0) {
+                mergedContent += "\n\n";
+            }
+            mergedContent += content;
+        }
+
+        let fileName = folder.name;
+        let filePath = `${folder.path}/${fileName}.md`;
+        let counter = 1;
+
+        while (this.app.vault.getAbstractFileByPath(filePath)) {
+            filePath = `${folder.path}/${fileName} ${counter}.md`;
+            counter++;
+        }
+
+        try {
+            await this.app.vault.create(filePath, mergedContent);
+            new Notice(`Merged ${files.length} notes into ${filePath.split('/').pop()}`);
+        } catch (error) {
+            console.error("Error merging notes:", error);
+            new Notice("Failed to merge notes. See console for details.");
+        }
     }
 
     onunload() {

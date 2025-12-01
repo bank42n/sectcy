@@ -10,6 +10,7 @@ This plugin adds "Select" and "Copy" buttons to your section headers in Obsidian
     - **Always Show Icons**: Choose to always show the icons or only show them on hover.
     - **Include Header**: Choose whether to include the header title in the selection/copy.
     - **Toggle Buttons**: Independently enable or disable the Select and Copy buttons.
+- **Merge Folder Notes**: Right-click a folder to merge all its markdown notes into a single file.
 
 ## Installation
 
@@ -25,6 +26,12 @@ This plugin adds "Select" and "Copy" buttons to your section headers in Obsidian
 1.  Hover over any header in **Live Preview** or **Reading View**.
 2.  Click the **Select** icon (pointer) to highlight the section.
 3.  Click the **Copy** icon (clipboard) to copy the section to your clipboard.
+
+### Merge Folder Notes
+
+1.  Right-click on any folder in the file explorer.
+2.  Select **Merge Folder Notes**.
+3.  A new file named `{Folder Name}.md` (or `{Folder Name} 1.md` if it exists) will be created inside the folder, containing the content of all markdown notes in that folder, separated by double newlines.
 
 ## Settings
 

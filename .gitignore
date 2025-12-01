@@ -7,3 +7,5 @@ install_plugin.py
 release_setup.py
 
 dist
+
+release_notes*

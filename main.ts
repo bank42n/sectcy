@@ -7,13 +7,17 @@ interface SelectSectionSettings {
     includeHeader: boolean;
     showSelectButton: boolean;
     showCopyButton: boolean;
+    showSelectHeaderButton: boolean;
+    compactButtons: boolean;
 }
 
 const DEFAULT_SETTINGS: SelectSectionSettings = {
     alwaysShowIcons: false,
     includeHeader: true,
     showSelectButton: true,
-    showCopyButton: true
+    showCopyButton: true,
+    showSelectHeaderButton: true,
+    compactButtons: false
 }
 
 export default class SelectSectionPlugin extends Plugin {
@@ -110,6 +114,30 @@ export default class SelectSectionPlugin extends Plugin {
         } else {
             document.body.removeClass("select-section-always-show");
         }
+
+        if (this.settings.compactButtons) {
+            document.body.addClass("select-section-compact-mode");
+        } else {
+            document.body.removeClass("select-section-compact-mode");
+        }
+
+        if (this.settings.showSelectButton) {
+            document.body.addClass("select-section-show-select");
+        } else {
+            document.body.removeClass("select-section-show-select");
+        }
+
+        if (this.settings.showCopyButton) {
+            document.body.addClass("select-section-show-copy");
+        } else {
+            document.body.removeClass("select-section-show-copy");
+        }
+
+        if (this.settings.showSelectHeaderButton) {
+            document.body.addClass("select-section-show-select-header");
+        } else {
+            document.body.removeClass("select-section-show-select-header");
+        }
     }
 
     addIconsToHeader(header: HTMLElement, context: MarkdownPostProcessorContext) {
@@ -120,30 +148,74 @@ export default class SelectSectionPlugin extends Plugin {
         container.addClass("select-section-container");
         // Body class handles visibility now
 
-        if (this.settings.showSelectButton) {
-            const selectBtn = container.createSpan({ cls: "select-section-btn" });
-            setIcon(selectBtn, "mouse-pointer-click");
-            selectBtn.ariaLabel = "Select and Copy Section";
-            selectBtn.onclick = (e) => {
-                e.stopPropagation();
-                this.handleSelect(header, context);
-            };
-        }
+        // Unified DOM Structure
+        // We always create the "compact" structure: Container -> [Trigger, ActionsContainer -> [Select, Copy]]
+        // CSS will handle showing/hiding the trigger and positioning the actions based on the body class.
 
-        if (this.settings.showCopyButton) {
-            const copyBtn = container.createSpan({ cls: "select-section-btn" });
-            setIcon(copyBtn, "copy");
-            copyBtn.ariaLabel = "Copy Section";
-            copyBtn.onclick = (e) => {
-                e.stopPropagation();
-                this.handleCopy(header, context);
-            };
-        }
+        container.addClass("select-section-compact"); // Always add this class for consistent styling hooks
+
+        const triggerBtn = container.createSpan({ cls: "select-section-btn select-section-compact-trigger" });
+        setIcon(triggerBtn, "more-horizontal");
+        triggerBtn.ariaLabel = "Show Actions";
+
+        const actionsContainer = container.createSpan({ cls: "select-section-compact-actions" });
+
+        triggerBtn.onclick = (e) => {
+            e.stopPropagation();
+            // Only toggle if we are effectively in compact mode (checked via body class or just always toggle and let CSS hide it if not needed)
+            // Actually, if the trigger is visible (handled by CSS), clicking it should toggle.
+            actionsContainer.classList.toggle("show");
+        };
+
+        // Close when clicking outside
+        document.addEventListener("click", (e) => {
+            if (!container.contains(e.target as Node)) {
+                actionsContainer.removeClass("show");
+            }
+        });
+
+        this.createActionButtons(actionsContainer, header, context);
 
         header.appendChild(container);
     }
 
+    createActionButtons(container: HTMLElement, header: HTMLElement, context: MarkdownPostProcessorContext) {
+        // Always create buttons, visibility controlled by CSS
+        const selectBtn = container.createSpan({ cls: "select-section-btn select-section-btn-select" });
+        setIcon(selectBtn, "mouse-pointer-click");
+        selectBtn.ariaLabel = "Select and Copy Section";
+        selectBtn.onclick = (e) => {
+            e.stopPropagation();
+            this.handleSelect(header, context);
+        };
+
+        const copyBtn = container.createSpan({ cls: "select-section-btn select-section-btn-copy" });
+        setIcon(copyBtn, "copy");
+        copyBtn.ariaLabel = "Copy Section";
+        copyBtn.onclick = (e) => {
+            e.stopPropagation();
+            this.handleCopy(header, context);
+        };
+
+        const selectHeaderBtn = container.createSpan({ cls: "select-section-btn select-section-btn-select-header" });
+        setIcon(selectHeaderBtn, "heading");
+        selectHeaderBtn.ariaLabel = "Select Header Title Only";
+        selectHeaderBtn.onclick = (e) => {
+            e.stopPropagation();
+            this.handleSelectHeader(header, context);
+        };
+    }
+
     // Logic for Reading View Selection/Copy
+    handleSelectHeader(header: HTMLElement, context: MarkdownPostProcessorContext) {
+        const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+        if (view) {
+            const sectionInfo = context.getSectionInfo(header);
+            if (sectionInfo) {
+                this.selectHeaderOnly(view.editor, sectionInfo.lineStart);
+            }
+        }
+    }
     handleSelect(header: HTMLElement, context: MarkdownPostProcessorContext) {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (view) {
@@ -221,6 +293,38 @@ export default class SelectSectionPlugin extends Plugin {
             });
         }
     }
+
+    selectHeaderOnly(editor: Editor, headerLine: number) {
+        const headerText = editor.getLine(headerLine);
+        const match = headerText.match(/^(#+)\s+(.*)$/);
+
+        if (match) {
+            const hashes = match[1];
+            const title = match[2];
+            // Start after hashes and space
+            const startCh = hashes.length + 1; // +1 for space (assuming single space, regex \s+ might match more but standard is usually one)
+            // Actually, let's be precise:
+            const matchIndex = match.index || 0;
+            const fullMatch = match[0];
+            // We want the range of group 2 (title)
+            // match[1] is hashes
+            // match[2] is title
+            // The space is between them.
+
+            // Let's find the start index of title in the line
+            // It's length of hashes + length of whitespace
+            const prefixMatch = headerText.match(/^(#+\s+)/);
+            if (prefixMatch) {
+                const prefixLen = prefixMatch[1].length;
+                const endCh = prefixLen + title.length;
+
+                editor.setSelection(
+                    { line: headerLine, ch: prefixLen },
+                    { line: headerLine, ch: endCh }
+                );
+            }
+        }
+    }
 }
 
 // CodeMirror 6 Extension for Live Preview
@@ -289,33 +393,70 @@ class SelectSectionWidget extends WidgetType {
         container.addClass("cm-widget"); // Helper class
         // Body class handles visibility now
 
-        if (this.plugin.settings.showSelectButton) {
-            const selectBtn = container.createSpan({ cls: "select-section-btn" });
-            setIcon(selectBtn, "mouse-pointer-click");
-            selectBtn.ariaLabel = "Select and Copy Section";
-            selectBtn.onclick = (e) => {
-                e.stopPropagation(); // Prevent cursor movement
-                const markdownView = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
-                if (markdownView) {
-                    this.plugin.selectOrCopySection(markdownView.editor, this.lineNumber, true);
-                }
-            };
-        }
+        // Unified DOM Structure
+        container.addClass("select-section-compact");
 
-        if (this.plugin.settings.showCopyButton) {
-            const copyBtn = container.createSpan({ cls: "select-section-btn" });
-            setIcon(copyBtn, "copy");
-            copyBtn.ariaLabel = "Copy Section";
-            copyBtn.onclick = (e) => {
-                e.stopPropagation();
-                const markdownView = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
-                if (markdownView) {
-                    this.plugin.selectOrCopySection(markdownView.editor, this.lineNumber, false, true);
-                }
-            };
-        }
+        const triggerBtn = container.createSpan({ cls: "select-section-btn select-section-compact-trigger" });
+        setIcon(triggerBtn, "more-horizontal");
+        triggerBtn.ariaLabel = "Show Actions";
+
+        const actionsContainer = container.createSpan({ cls: "select-section-compact-actions" });
+
+        triggerBtn.onclick = (e) => {
+            e.stopPropagation();
+            actionsContainer.classList.toggle("show");
+        };
+
+        // Close when clicking outside
+        const closeHandler = (e: MouseEvent) => {
+            if (!container.contains(e.target as Node)) {
+                actionsContainer.removeClass("show");
+                document.removeEventListener("click", closeHandler);
+            }
+        };
+        triggerBtn.addEventListener("click", () => {
+            document.addEventListener("click", closeHandler);
+        });
+
+        this.createActionButtons(actionsContainer);
 
         return container;
+    }
+
+    createActionButtons(container: HTMLElement) {
+        // Always create buttons, visibility controlled by CSS
+        const selectBtn = container.createSpan({ cls: "select-section-btn select-section-btn-select" });
+        setIcon(selectBtn, "mouse-pointer-click");
+        selectBtn.ariaLabel = "Select and Copy Section";
+        selectBtn.onclick = (e) => {
+            e.stopPropagation(); // Prevent cursor movement
+            const markdownView = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
+            if (markdownView) {
+                this.plugin.selectOrCopySection(markdownView.editor, this.lineNumber, true);
+            }
+        };
+
+        const copyBtn = container.createSpan({ cls: "select-section-btn select-section-btn-copy" });
+        setIcon(copyBtn, "copy");
+        copyBtn.ariaLabel = "Copy Section";
+        copyBtn.onclick = (e) => {
+            e.stopPropagation();
+            const markdownView = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
+            if (markdownView) {
+                this.plugin.selectOrCopySection(markdownView.editor, this.lineNumber, false, true);
+            }
+        };
+
+        const selectHeaderBtn = container.createSpan({ cls: "select-section-btn select-section-btn-select-header" });
+        setIcon(selectHeaderBtn, "heading");
+        selectHeaderBtn.ariaLabel = "Select Header Title Only";
+        selectHeaderBtn.onclick = (e) => {
+            e.stopPropagation();
+            const markdownView = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
+            if (markdownView) {
+                this.plugin.selectHeaderOnly(markdownView.editor, this.lineNumber);
+            }
+        };
     }
 }
 
@@ -371,6 +512,26 @@ class SelectSectionSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.showCopyButton)
                 .onChange(async (value) => {
                     this.plugin.settings.showCopyButton = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Show Select Header Button')
+            .setDesc('Show the button to select only the header title.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.showSelectHeaderButton)
+                .onChange(async (value) => {
+                    this.plugin.settings.showSelectHeaderButton = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Compact Buttons')
+            .setDesc('Stack buttons into a single toggle menu.')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.compactButtons)
+                .onChange(async (value) => {
+                    this.plugin.settings.compactButtons = value;
                     await this.plugin.saveSettings();
                 }));
     }

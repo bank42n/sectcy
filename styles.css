@@ -51,3 +51,81 @@ body.select-section-always-show .select-section-container {
     width: 16px;
     height: 16px;
 }
+
+/* Compact Mode Styles */
+.select-section-compact {
+    position: relative;
+}
+
+/* Default State (Standard Mode) */
+.select-section-compact-trigger {
+    display: none;
+    /* Hidden by default */
+}
+
+.select-section-compact-actions {
+    display: inline-flex;
+    /* Visible inline by default */
+    /* Reset compact styles */
+    position: static;
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    margin-left: 0;
+    transform: none;
+}
+
+/* Compact Mode State (Activated by body class) */
+body.select-section-compact-mode .select-section-compact-trigger {
+    display: inline-flex;
+    /* Show trigger */
+}
+
+body.select-section-compact-mode .select-section-compact-actions {
+    display: none;
+    /* Hide actions initially */
+    position: absolute;
+    left: 100%;
+    top: 50%;
+    transform: translateY(-50%);
+    background-color: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    padding: 2px;
+    margin-left: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    flex-direction: row;
+    align-items: center;
+}
+
+body.select-section-compact-mode .select-section-compact-actions.show {
+    display: flex;
+}
+
+body.select-section-compact-mode .select-section-compact-actions .select-section-btn {
+    margin: 0 2px;
+}
+
+/* Real-time Button Visibility */
+/* Default hidden */
+.select-section-btn-select,
+.select-section-btn-copy,
+.select-section-btn-select-header {
+    display: none !important;
+    /* Force hide unless enabled */
+}
+
+/* Show when enabled via body class */
+body.select-section-show-select .select-section-btn-select {
+    display: flex !important;
+}
+
+body.select-section-show-copy .select-section-btn-copy {
+    display: flex !important;
+}
+
+body.select-section-show-select-header .select-section-btn-select-header {
+    display: flex !important;
+}

@@ -34,7 +34,9 @@ var DEFAULT_SETTINGS = {
   alwaysShowIcons: false,
   includeHeader: true,
   showSelectButton: true,
-  showCopyButton: true
+  showCopyButton: true,
+  showSelectHeaderButton: true,
+  compactButtons: false
 };
 var SelectSectionPlugin = class extends import_obsidian.Plugin {
   async onload() {
@@ -106,33 +108,82 @@ var SelectSectionPlugin = class extends import_obsidian.Plugin {
     } else {
       document.body.removeClass("select-section-always-show");
     }
+    if (this.settings.compactButtons) {
+      document.body.addClass("select-section-compact-mode");
+    } else {
+      document.body.removeClass("select-section-compact-mode");
+    }
+    if (this.settings.showSelectButton) {
+      document.body.addClass("select-section-show-select");
+    } else {
+      document.body.removeClass("select-section-show-select");
+    }
+    if (this.settings.showCopyButton) {
+      document.body.addClass("select-section-show-copy");
+    } else {
+      document.body.removeClass("select-section-show-copy");
+    }
+    if (this.settings.showSelectHeaderButton) {
+      document.body.addClass("select-section-show-select-header");
+    } else {
+      document.body.removeClass("select-section-show-select-header");
+    }
   }
   addIconsToHeader(header, context) {
     if (header.querySelector(".select-section-container"))
       return;
     const container = document.createElement("span");
     container.addClass("select-section-container");
-    if (this.settings.showSelectButton) {
-      const selectBtn = container.createSpan({ cls: "select-section-btn" });
-      (0, import_obsidian.setIcon)(selectBtn, "mouse-pointer-click");
-      selectBtn.ariaLabel = "Select and Copy Section";
-      selectBtn.onclick = (e) => {
-        e.stopPropagation();
-        this.handleSelect(header, context);
-      };
-    }
-    if (this.settings.showCopyButton) {
-      const copyBtn = container.createSpan({ cls: "select-section-btn" });
-      (0, import_obsidian.setIcon)(copyBtn, "copy");
-      copyBtn.ariaLabel = "Copy Section";
-      copyBtn.onclick = (e) => {
-        e.stopPropagation();
-        this.handleCopy(header, context);
-      };
-    }
+    container.addClass("select-section-compact");
+    const triggerBtn = container.createSpan({ cls: "select-section-btn select-section-compact-trigger" });
+    (0, import_obsidian.setIcon)(triggerBtn, "more-horizontal");
+    triggerBtn.ariaLabel = "Show Actions";
+    const actionsContainer = container.createSpan({ cls: "select-section-compact-actions" });
+    triggerBtn.onclick = (e) => {
+      e.stopPropagation();
+      actionsContainer.classList.toggle("show");
+    };
+    document.addEventListener("click", (e) => {
+      if (!container.contains(e.target)) {
+        actionsContainer.removeClass("show");
+      }
+    });
+    this.createActionButtons(actionsContainer, header, context);
     header.appendChild(container);
   }
+  createActionButtons(container, header, context) {
+    const selectBtn = container.createSpan({ cls: "select-section-btn select-section-btn-select" });
+    (0, import_obsidian.setIcon)(selectBtn, "mouse-pointer-click");
+    selectBtn.ariaLabel = "Select and Copy Section";
+    selectBtn.onclick = (e) => {
+      e.stopPropagation();
+      this.handleSelect(header, context);
+    };
+    const copyBtn = container.createSpan({ cls: "select-section-btn select-section-btn-copy" });
+    (0, import_obsidian.setIcon)(copyBtn, "copy");
+    copyBtn.ariaLabel = "Copy Section";
+    copyBtn.onclick = (e) => {
+      e.stopPropagation();
+      this.handleCopy(header, context);
+    };
+    const selectHeaderBtn = container.createSpan({ cls: "select-section-btn select-section-btn-select-header" });
+    (0, import_obsidian.setIcon)(selectHeaderBtn, "heading");
+    selectHeaderBtn.ariaLabel = "Select Header Title Only";
+    selectHeaderBtn.onclick = (e) => {
+      e.stopPropagation();
+      this.handleSelectHeader(header, context);
+    };
+  }
   // Logic for Reading View Selection/Copy
+  handleSelectHeader(header, context) {
+    const view = this.app.workspace.getActiveViewOfType(import_obsidian.MarkdownView);
+    if (view) {
+      const sectionInfo = context.getSectionInfo(header);
+      if (sectionInfo) {
+        this.selectHeaderOnly(view.editor, sectionInfo.lineStart);
+      }
+    }
+  }
   handleSelect(header, context) {
     const view = this.app.workspace.getActiveViewOfType(import_obsidian.MarkdownView);
     if (view) {
@@ -195,6 +246,26 @@ var SelectSectionPlugin = class extends import_obsidian.Plugin {
       });
     }
   }
+  selectHeaderOnly(editor, headerLine) {
+    const headerText = editor.getLine(headerLine);
+    const match = headerText.match(/^(#+)\s+(.*)$/);
+    if (match) {
+      const hashes = match[1];
+      const title = match[2];
+      const startCh = hashes.length + 1;
+      const matchIndex = match.index || 0;
+      const fullMatch = match[0];
+      const prefixMatch = headerText.match(/^(#+\s+)/);
+      if (prefixMatch) {
+        const prefixLen = prefixMatch[1].length;
+        const endCh = prefixLen + title.length;
+        editor.setSelection(
+          { line: headerLine, ch: prefixLen },
+          { line: headerLine, ch: endCh }
+        );
+      }
+    }
+  }
 };
 function selectSectionExtension(plugin) {
   return import_view.ViewPlugin.fromClass(
@@ -245,31 +316,58 @@ var SelectSectionWidget = class extends import_view.WidgetType {
     const container = document.createElement("span");
     container.addClass("select-section-container");
     container.addClass("cm-widget");
-    if (this.plugin.settings.showSelectButton) {
-      const selectBtn = container.createSpan({ cls: "select-section-btn" });
-      (0, import_obsidian.setIcon)(selectBtn, "mouse-pointer-click");
-      selectBtn.ariaLabel = "Select and Copy Section";
-      selectBtn.onclick = (e) => {
-        e.stopPropagation();
-        const markdownView = this.plugin.app.workspace.getActiveViewOfType(import_obsidian.MarkdownView);
-        if (markdownView) {
-          this.plugin.selectOrCopySection(markdownView.editor, this.lineNumber, true);
-        }
-      };
-    }
-    if (this.plugin.settings.showCopyButton) {
-      const copyBtn = container.createSpan({ cls: "select-section-btn" });
-      (0, import_obsidian.setIcon)(copyBtn, "copy");
-      copyBtn.ariaLabel = "Copy Section";
-      copyBtn.onclick = (e) => {
-        e.stopPropagation();
-        const markdownView = this.plugin.app.workspace.getActiveViewOfType(import_obsidian.MarkdownView);
-        if (markdownView) {
-          this.plugin.selectOrCopySection(markdownView.editor, this.lineNumber, false, true);
-        }
-      };
-    }
+    container.addClass("select-section-compact");
+    const triggerBtn = container.createSpan({ cls: "select-section-btn select-section-compact-trigger" });
+    (0, import_obsidian.setIcon)(triggerBtn, "more-horizontal");
+    triggerBtn.ariaLabel = "Show Actions";
+    const actionsContainer = container.createSpan({ cls: "select-section-compact-actions" });
+    triggerBtn.onclick = (e) => {
+      e.stopPropagation();
+      actionsContainer.classList.toggle("show");
+    };
+    const closeHandler = (e) => {
+      if (!container.contains(e.target)) {
+        actionsContainer.removeClass("show");
+        document.removeEventListener("click", closeHandler);
+      }
+    };
+    triggerBtn.addEventListener("click", () => {
+      document.addEventListener("click", closeHandler);
+    });
+    this.createActionButtons(actionsContainer);
     return container;
+  }
+  createActionButtons(container) {
+    const selectBtn = container.createSpan({ cls: "select-section-btn select-section-btn-select" });
+    (0, import_obsidian.setIcon)(selectBtn, "mouse-pointer-click");
+    selectBtn.ariaLabel = "Select and Copy Section";
+    selectBtn.onclick = (e) => {
+      e.stopPropagation();
+      const markdownView = this.plugin.app.workspace.getActiveViewOfType(import_obsidian.MarkdownView);
+      if (markdownView) {
+        this.plugin.selectOrCopySection(markdownView.editor, this.lineNumber, true);
+      }
+    };
+    const copyBtn = container.createSpan({ cls: "select-section-btn select-section-btn-copy" });
+    (0, import_obsidian.setIcon)(copyBtn, "copy");
+    copyBtn.ariaLabel = "Copy Section";
+    copyBtn.onclick = (e) => {
+      e.stopPropagation();
+      const markdownView = this.plugin.app.workspace.getActiveViewOfType(import_obsidian.MarkdownView);
+      if (markdownView) {
+        this.plugin.selectOrCopySection(markdownView.editor, this.lineNumber, false, true);
+      }
+    };
+    const selectHeaderBtn = container.createSpan({ cls: "select-section-btn select-section-btn-select-header" });
+    (0, import_obsidian.setIcon)(selectHeaderBtn, "heading");
+    selectHeaderBtn.ariaLabel = "Select Header Title Only";
+    selectHeaderBtn.onclick = (e) => {
+      e.stopPropagation();
+      const markdownView = this.plugin.app.workspace.getActiveViewOfType(import_obsidian.MarkdownView);
+      if (markdownView) {
+        this.plugin.selectHeaderOnly(markdownView.editor, this.lineNumber);
+      }
+    };
   }
 };
 var SelectSectionSettingTab = class extends import_obsidian.PluginSettingTab {
@@ -295,6 +393,14 @@ var SelectSectionSettingTab = class extends import_obsidian.PluginSettingTab {
     }));
     new import_obsidian.Setting(containerEl).setName("Show Copy Button").setDesc("Show the button to copy the section content.").addToggle((toggle) => toggle.setValue(this.plugin.settings.showCopyButton).onChange(async (value) => {
       this.plugin.settings.showCopyButton = value;
+      await this.plugin.saveSettings();
+    }));
+    new import_obsidian.Setting(containerEl).setName("Show Select Header Button").setDesc("Show the button to select only the header title.").addToggle((toggle) => toggle.setValue(this.plugin.settings.showSelectHeaderButton).onChange(async (value) => {
+      this.plugin.settings.showSelectHeaderButton = value;
+      await this.plugin.saveSettings();
+    }));
+    new import_obsidian.Setting(containerEl).setName("Compact Buttons").setDesc("Stack buttons into a single toggle menu.").addToggle((toggle) => toggle.setValue(this.plugin.settings.compactButtons).onChange(async (value) => {
+      this.plugin.settings.compactButtons = value;
       await this.plugin.saveSettings();
     }));
   }

@@ -58,16 +58,34 @@ var SelectSectionPlugin = class extends import_obsidian.Plugin {
               await this.mergeFolderNotes(file);
             });
           });
+          menu.addItem((item) => {
+            item.setTitle("Merge Some Folder Notes").setIcon("list-checks").onClick(async () => {
+              await this.mergeSomeFolderNotes(file);
+            });
+          });
         }
       })
     );
   }
   async mergeFolderNotes(folder) {
-    const files = folder.children.filter((file) => file instanceof import_obsidian.TFile && file.extension === "md").sort((a, b) => a.name.localeCompare(b.name));
+    const files = folder.children.filter((file) => file instanceof import_obsidian.TFile && file.extension === "md").sort((a, b) => a.name.localeCompare(b.name, void 0, { numeric: true, sensitivity: "base" }));
     if (files.length === 0) {
       new import_obsidian.Notice("No markdown files found in this folder.");
       return;
     }
+    await this.performMerge(folder, files);
+  }
+  async mergeSomeFolderNotes(folder) {
+    const files = folder.children.filter((file) => file instanceof import_obsidian.TFile && file.extension === "md").sort((a, b) => a.name.localeCompare(b.name, void 0, { numeric: true, sensitivity: "base" }));
+    if (files.length === 0) {
+      new import_obsidian.Notice("No markdown files found in this folder.");
+      return;
+    }
+    new MergeNotesModal(this.app, files, async (selectedFiles) => {
+      await this.performMerge(folder, selectedFiles);
+    }).open();
+  }
+  async performMerge(folder, files) {
     let mergedContent = "";
     for (const file of files) {
       const content = await this.app.vault.read(file);
@@ -403,5 +421,98 @@ var SelectSectionSettingTab = class extends import_obsidian.PluginSettingTab {
       this.plugin.settings.compactButtons = value;
       await this.plugin.saveSettings();
     }));
+  }
+};
+var MergeNotesModal = class extends import_obsidian.Modal {
+  constructor(app, files, onMerge) {
+    super(app);
+    this.dragStartIndex = null;
+    this.files = files;
+    this.selectedFiles = new Set(files);
+    this.onMerge = onMerge;
+  }
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.createEl("h2", { text: "Merge Some Folder Notes" });
+    contentEl.createEl("p", { text: "Select files to merge and drag to reorder." });
+    const listContainer = contentEl.createDiv({ cls: "merge-notes-list" });
+    this.renderList(listContainer);
+    const buttonContainer = contentEl.createDiv({ cls: "merge-notes-buttons" });
+    buttonContainer.style.marginTop = "1rem";
+    buttonContainer.style.display = "flex";
+    buttonContainer.style.justifyContent = "flex-end";
+    buttonContainer.style.gap = "10px";
+    const cancelButton = buttonContainer.createEl("button", { text: "Cancel" });
+    cancelButton.onclick = () => this.close();
+    const mergeButton = buttonContainer.createEl("button", { text: "Merge", cls: "mod-cta" });
+    mergeButton.onclick = () => {
+      const filesToMerge = this.files.filter((f) => this.selectedFiles.has(f));
+      if (filesToMerge.length === 0) {
+        new import_obsidian.Notice("Please select at least one file to merge.");
+        return;
+      }
+      this.onMerge(filesToMerge);
+      this.close();
+    };
+  }
+  renderList(container) {
+    container.empty();
+    this.files.forEach((file, index) => {
+      const item = container.createDiv({ cls: "merge-note-item" });
+      item.style.display = "flex";
+      item.style.alignItems = "center";
+      item.style.padding = "5px";
+      item.style.borderBottom = "1px solid var(--background-modifier-border)";
+      item.style.cursor = "grab";
+      item.draggable = true;
+      item.ondragstart = (e) => {
+        var _a;
+        this.dragStartIndex = index;
+        (_a = e.dataTransfer) == null ? void 0 : _a.setData("text/plain", index.toString());
+        item.style.opacity = "0.5";
+      };
+      item.ondragover = (e) => {
+        e.preventDefault();
+        item.style.background = "var(--background-modifier-hover)";
+      };
+      item.ondragleave = () => {
+        item.style.background = "";
+      };
+      item.ondrop = (e) => {
+        e.preventDefault();
+        item.style.background = "";
+        const dragIndex = this.dragStartIndex;
+        if (dragIndex !== null && dragIndex !== index) {
+          const movedItem = this.files.splice(dragIndex, 1)[0];
+          this.files.splice(index, 0, movedItem);
+          this.renderList(container);
+        }
+        this.dragStartIndex = null;
+      };
+      item.ondragend = () => {
+        item.style.opacity = "1";
+        this.dragStartIndex = null;
+      };
+      const checkbox = item.createEl("input", { type: "checkbox" });
+      checkbox.checked = this.selectedFiles.has(file);
+      checkbox.style.marginRight = "10px";
+      checkbox.onchange = (e) => {
+        if (e.target.checked) {
+          this.selectedFiles.add(file);
+        } else {
+          this.selectedFiles.delete(file);
+        }
+      };
+      item.createSpan({ text: file.name });
+      const handle = item.createSpan({ cls: "merge-note-handle" });
+      (0, import_obsidian.setIcon)(handle, "grip-vertical");
+      handle.style.marginLeft = "auto";
+      handle.style.color = "var(--text-muted)";
+    });
+  }
+  onClose() {
+    const { contentEl } = this;
+    contentEl.empty();
   }
 };
